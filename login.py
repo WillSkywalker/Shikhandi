@@ -1,6 +1,8 @@
 #/usr/bin/env python
 # -_- coding: utf-8 -_-
 
+
+import os
 import requests
 import cookielib
 import base64
@@ -42,7 +44,11 @@ def login_renren(username, password, rememberme=True):
         if rememberme:
             choice = raw_input('Do you want to save your username and password? [Y/N]')
             if choice.lower() == 'y':
-                f = open(username, 'w')
+                try:
+                    f = open('users/'+username, 'w')
+                except IOError:
+                    os.mkdir('user/')
+                    f = open('users/'+username, 'w')
                 f.write(username+'\n')
                 f.write(base64.b32encode(password))
                 f.close()
@@ -83,7 +89,7 @@ def main():
     if len(argv) == 1:
         login_renren(raw_input('Username: '), raw_input('Password: '))
     elif argv[1] == '-f':
-        with open(argv[2]) as fhand:
+        with open('users/'+argv[2]) as fhand:
             l = fhand.readlines()
             login_renren(l[0], base64.b32decode(l[1]), rememberme=False)
     elif argv > 1:

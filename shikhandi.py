@@ -1,6 +1,8 @@
 #/usr/bin/env python
 # -_- coding: utf-8 -_-
 
+
+import os
 import requests
 import cookielib
 from bs4 import BeautifulSoup
@@ -44,7 +46,11 @@ def grab(url):
 def save_photo(url, time):
     i = s.get(url, header_info)
     if i.status_code == 200:
-        open(time, 'wb').write(i.content)
+        try:
+            open('photos/'+time, 'wb').write(i.content)
+        except IOError:
+            os.mkdir('photos/')
+            open('photos/'+time, 'wb').write(i.content)
         print 'Get photo successed.'
     else:
         print 'Get photo', url, 'failed.'
