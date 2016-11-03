@@ -3,4 +3,8 @@
 /users/
 /photos/
 testpatch
+/Ahoo
 
+
+*.jpg
+/venv*
