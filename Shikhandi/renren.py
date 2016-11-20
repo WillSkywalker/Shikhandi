@@ -65,7 +65,7 @@ class RenRen:
 
     photo_patterns = ((''))
 
-    def __init__(self, username, password, rememberme=True, base_dir=None):
+    def __init__(self, username, password, rememberme=True, base_dir=None, photo=True):
         super(RenRen, self).__init__()
         self._s = requests.session()
         self._s.cookies = http.cookiejar.LWPCookieJar('renren.cookie')
@@ -79,6 +79,7 @@ class RenRen:
         self.rememberme = rememberme
         self.friends = None
         self.base_dir = base_dir if base_dir else os.getcwd()
+        self.download_photo = photo
 
 
     def login(self):
@@ -131,13 +132,13 @@ class RenRen:
         return [[people['fid'], people['fname']] for people in self.friends]
 
 
-    def get_user_history(self, user, target_name, begin, end):
-        self.target_name = target_name
+    def get_user_history(self, user, name, begin, end):
+        target_name = os.path.join(self.base_dir, name)
         if not os.path.exists(target_name):
             os.mkdir(target_name)
         self.target_fhand = open(target_name+'/posts.txt', 'wb')
         self.photo_threads = []
-        for year in range(end, begin, -1):
+        for year in range(end, begin-1, -1):
             for month in range(12, 0, -1):
                 url = 'http://www.renren.com/timelinefeedretrieve.do?ownerid=%d&render=0&begin=0&limit=300&year=%d&month=%d&isAdmin=false' % (user, year, month)
                 self.grab_page(url)
@@ -148,7 +149,7 @@ class RenRen:
         self.target_fhand.close()
 
 
-    def grab_page(self, url, photos_on=False):
+    def grab_page(self, url):
         all_stats = []
         r = self._s.get(url, headers=HEADER_INFO)
         # print s.get('http://www.renren.com/', headers=header_info).content
@@ -157,25 +158,24 @@ class RenRen:
         list_of_feeds = soup.findAll('section', 'tl-a-feed')
         for new in list_of_feeds:
             string = new.find('input', type='hidden')['value']
-            if photos_on and new.find('img'):
+            if self.download_photo and new.find('img'):
                 ps = Thread(target=self.save_photo, args=(new.find('img').get('src'), string)).start()
                 self.photo_threads.append(ps)
                 if new.find('div', class_='content-photo'):
                     string += ': ' + new.find('div', class_='content-photo').text
+                else:
+                    string += ': 分享图片'
             # elif new.find('div', class_='content-main'):
             if new.find('div', class_='content-main'):
                 string += ': ' + new.find('div', class_='content-main').text
             if new.find('div', class_='main-text'):
                 string += ': ' + new.find('div', class_='main-text').text
             all_stats.append(string)
-            self.target_fhand.write(string.encode('utf-8')+'\n')
-            self.target_fhand.write('\n=========================\n\n')
+            self.target_fhand.write(string.encode('utf-8')+b'\n')
+            self.target_fhand.write(b'\n=========================\n\n')
             print(string)
         return all_stats
 
-
-    def parse_page():
-        pass
 
 
     def save_photo(self, url, time):
@@ -216,22 +216,24 @@ def get_informs(maxlen=1000):
     end = int(input('Until year: '))
     if target_user > maxlen:
         raise InputFormatError('User doesn\'t exist!')
-    elif start > end or start < 2008:
-        raise InputFormatError('Incorrect year number!')
+    elif start > end or start < 2006 or end > datetime.now().year:
+        raise InputFormatError('You can only choose between year %d-%d' % (2006, datetime.now().year))
     return target_user, start, end
 
 
 
 def main():
+    parser = argparse.ArgumentParser(description='Keep your memory. From renren.com and Tieba.')
+    parser.add_argument('-u', '--username-and-password', nargs=2, 
+        metavar=('USER', 'PASSWORD'), help='Your username and password on RenRen')
+    parser.add_argument('-P', '--photos', action='store_true')
+    args = vars(parser.parse_args())
+
     if len(argv) == 1:
-        user = RenRen(input('Username: '), getpass('Password: '))
-    elif argv[1] == '-f':
-        with open('users/'+argv[2]) as fhand:
-            l = fhand.readlines()
-            user = RenRen(l[0], base64.b32decode(l[1]), rememberme=False)
-    elif argv > 1:
-        print('Usage: python renren.py [-f username]')
-        return
+        user = RenRen(input('Username: '), getpass('Password: '), photo=args['photos'])
+    else:
+        user = RenRen(args['username_and_password'][0], 
+                      args['username_and_password'][1], photo=args['photos'])
 
     try:
         user.login()
@@ -253,9 +255,9 @@ def main():
             print(e)
             print("Please input again...")
 
-    user.get_user_history(friend_list[target][0],friend_list[target][1] , begin, end)
+    user.get_user_history(friend_list[target][0],friend_list[target][1], begin, end)
     input('\nFinished!')
-    user.exit()
+    user.close()
 
 
 

@@ -21,3 +21,5 @@ class TestRenRen(unittest.TestCase):
         friendlist = self.ren.get_friend_list()
         print(friendlist)
         
+    def test_get_user_history(self):
+        u = self.ren.get_user_history(851183543, 'Ahoo', 2008, 2016)
