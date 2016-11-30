@@ -8,3 +8,6 @@ testpatch
 
 *.jpg
 /venv*
+*.egg-info
+/dist
+/build
