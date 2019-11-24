@@ -7,7 +7,7 @@ setup(
 
     install_requires=['beautifulsoup4==4.5.1',
                       'bs4==0.0.1',
-                      'requests==2.11.1'],
+                      'requests==2.20.0'],
 
     package_data={
         # If any package contains *.txt or *.rst files, include them:
